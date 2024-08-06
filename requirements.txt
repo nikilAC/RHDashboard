@@ -1,2 +1,13 @@
 streamlit
 pandas
+math
+pathlib
+plotly
+numpy
+collections
+io
+json
+apiclient
+httplib2
+IPython
+boto3
