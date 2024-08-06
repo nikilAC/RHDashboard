@@ -2,150 +2,243 @@ import streamlit as st
 import pandas as pd
 import math
 from pathlib import Path
+import plotly.express as px
+import plotly.graph_objects as go
+import numpy as np 
+from collections.abc import Mapping
+import io
+import json
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+from apiclient import discovery
+from httplib2 import Http
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
+from IPython.display import display
+import boto3
 
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
+google_auth_secrets = st.secrets["AWSKeys"]
+
+
+
+def get_drive_data():
+    """Grab Data from AWS .
     """
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    s3_client = boto3.client('s3', aws_access_key_id = google_auth_secrets['aws_key_access'], aws_secret_access_key = google_auth_secrets['aws_secret'])
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+    # Get Representative SN1 Data from AWS
+    representativeData = s3_client.get_object(Bucket = 'rhbucketthing', Key = 'SN1_Representative_Data.csv')
+    # Weather Data to base Estimations on
+    tokyoGasData = s3_client.get_object(Bucket = 'rhbucketthing', Key = 'ATT-02_Meteorological_Data-Yokohama_2014-2024.xlsx')
+  
+    # Change format of object such that it outputs as Df (Csv needs decoding to get the correct result)
+    return pd.read_csv(io.StringIO(representativeData['Body'].read().decode('utf-8'))), pd.read_excel(io.BytesIO(tokyoGasData['Body'].read()))
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
-
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
-]
-
-st.header('GDP over time', divider='gray')
-
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
-)
-
-''
-''
+df1, df2 = get_drive_data()
 
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
 
-st.header(f'GDP in {to_year}', divider='gray')
 
-''
+def getFilePydrive(file_name):
+  folder_id = '1XdHmj5RqecLzyxtFmWSXVm3Z7l-P905t'
+  query = f"'{folder_id}' in parents and title = '{file_name}' and trashed = false"
+  file_list = drive.ListFile({'q': query, 'supportsAllDrives': True,
+        'includeItemsFromAllDrives': True}).GetList()
+  if not file_list:
+    print(f'File "{file_name}" not found.')
+  else:
+    # Take the first matching file
+    file = file_list[0]
 
-cols = st.columns(4)
+    # Saves file locally
+    file.GetContentFile(f'{file_name}')
 
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
+  if '.csv' in file_name:
+     return pd.read_csv(file_name)
+  else:
+     return pd.read_excel(file_name)
 
-    with col:
-        first_gdp = first_year[gdp_df['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[gdp_df['Country Code'] == country]['GDP'].iat[0] / 1000000000
+#sn1_data = getFilePydrive(file_name)
 
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+# RH Data Estimation Script
 
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+def perfEstFuncPolynom(df, weatherData, scale=1):
+  #Dictionaries
+
+  # For converting hourly estimates -> Monthly Estimates
+  hours_in_month = {
+    "01": 31 * 24,
+    "02": 28 * 24,  # 29 * 24 for leap year
+    "03": 31 * 24,
+    "04": 30 * 24,
+    "05": 31 * 24,
+    "06": 30 * 24,
+    "07": 31 * 24,
+    "08": 31 * 24,
+    "09": 30 * 24,
+    "10": 31 * 24,
+    "11": 30 * 24,
+    "12": 31 * 24
+      }
+
+  # Dictionary For Translating MonthNumber to Name
+  monthNumToName = {
+        "1" : "January",
+        "2" : "February",
+        "3" : "March",
+        "4" : "April",
+        "5" : "May",
+        "6" : "June",
+        "7" : "July",
+        "8" : "August",
+        "9" : "September",
+        "10" : "October",
+        "11" : "November",
+        "12" : "December"
+    }
+  
+
+   # Create a consistent coloring convention for Contactors {TO CHANGE LATER WHEN WE GET MORE BRICKS}
+  colors = {
+      2: "blue",
+      17: "red"
+  }
+
+  # Getting and collecting weather data
+
+
+  # Drop all non-numeric rows from weather date (in case of null values)) 
+  # Assuming temperature is Temperature_degC And humidity is RH_percent {O(n) Runtime}
+  weatherData = weatherData[pd.to_numeric(weatherData['Temperature_degC'], errors='coerce').notnull()]
+  weatherData = weatherData[pd.to_numeric(weatherData['RH_percent'], errors='coerce').notnull()]
+
+
+    #Test Later
+    #weatherData[['Temperature_degC', "RH_percent"]] = weatherData[['Temperature_degC', "RH_percent"]].apply(pd.to_numeric)
+
+  # Make Temperature and RH Percent columns Numeric {O(n) Runtime}
+  weatherData['Temperature_degC'] = pd.to_numeric(weatherData['Temperature_degC'])
+  weatherData['RH_percent'] = pd.to_numeric(weatherData['RH_percent'])
+
+  weatherData.index = np.arange(0, len(weatherData))
+
+    # Full CO2 Calculations (Python Side)
+
+  # Calculating CO2 Purity (Of initial SN1 Data)
+  # [NOTE FLOW CALCULATION IS DONE USING FOX SENSOR: gives indiction of CO2 Flow]
+  # [NOTE PURITY CALCULATION IS CURRENTLY DONE USING BGA]
+
+  df["CO2_Purity-Corrected_g"] = df[" CO2_Fox_g"] * (df[" DAC_CO2_Percent"] / 100)
+
+  # Calculating Kg Per Hour Again, Directly from CO2_Purity_corrected (/1000 to kg, /CycleSecs to cycle time, * 3600 to hour)
+  df["CO2_Kg_Per_Hour_Projected"] = df["CO2_Purity-Corrected_g"] / 1000 / df[" CycleSecs"] * 3600
+
+  # Calculating Kg Per Day
+  df["CO2_Kg_Per_Day_Projected"] = df["CO2_Kg_Per_Hour_Projected"] * 24
+
+  # Making various figures
+  mainPlot = go.Figure()
+  dayBar = go.Figure()
+  monthBar = go.Figure()
+  newFig = go.Figure()
+
+  # For loop to create contactor-specific data 
+  for contactor in df["Contactor Type"].unique():
+    
+    contactDf = df
+    # Do not consider first three towers for type 17 brick
+    if contactor == 17:
+      contactDf = contactDf.query('`Contactor Type` == 17 and ` DAC_TowerNum` > 3')
+    else:
+      contactDf = contactDf.query('`Contactor Type` == @contactor')
+
+    # Polynomial regression fit to create estimation
+    poly_fit = np.polyfit(contactDf[" AirRelHumid_In"], contactDf["CO2_Kg_Per_Hour_Projected"], deg=3)
+
+    # Find maximum and minimum RH Values in Operational data, so we can set any values not between these to one or the other
+    maxRH = contactDf[' AirRelHumid_In'].max()
+    minRH = contactDf[' AirRelHumid_In'].min()
+
+    print(f"Contactor Type {contactor}")
+
+    # Accounting for values outside our range
+    weatherData.loc[weatherData['RH_percent'] < minRH, 'RH_percent'] = minRH + .01
+    weatherData.loc[weatherData['RH_percent'] > maxRH, 'RH_percent'] = maxRH
+
+
+    # Include timestamps for added granularity (generalize for different times of data)
+    weatherData["Timestamp"] = pd.to_datetime(weatherData["Timestamp"])
+    weatherData['Month_Year'] = weatherData['Timestamp'].dt.strftime('%Y-%m')
+    weatherData["Month"] = weatherData["Timestamp"].dt.month
+    weatherData["Day"] = weatherData["Timestamp"].dt.day
+    weatherData["Date"] = weatherData["Timestamp"].dt.date
+    weatherData = weatherData.sort_values(by="Timestamp")
+
+
+    # Calculating Values for Interpolation: (y2 - y1) / (x2 - x1) * (x - x1) + y1 = y
+
+    model = np.poly1d(poly_fit)
+    weatherData["CO2_Kg_Per_Hour_Projected"] = model(weatherData["RH_percent"]) * scale
+
+    # Plotting hour-by-hour line/scatter plot
+    mainPlot.add_trace(go.Scatter(x=weatherData["Timestamp"], y=weatherData["CO2_Kg_Per_Hour_Projected"], mode='markers+lines', name = f"Contactor Type: {contactor}", marker_color = colors[contactor], yaxis= 'y1'))
+
+    # Building Month Based Bar Chart
+    # Getting the month as a number
+    year, month = zip(*np.array(weatherData["Month_Year"].str.split("-")))
+
+    month = pd.Series(month)
+
+    # finding average RH then multiplying because not every day has data
+    weatherData["HoursInMonth"] = month.map(hours_in_month)
+    weatherData["CO2_Kg_Per_Month_Projected"] = weatherData["CO2_Kg_Per_Hour_Projected"] * weatherData["HoursInMonth"]
+    weatherData["Month_Year"] = pd.to_datetime(weatherData["Month_Year"])
+
+    # Adding up RH from each Day (won't fully line up with month predictions) 
+    dayMerge = weatherData.groupby("Date").agg({"CO2_Kg_Per_Hour_Projected": "sum"}).reset_index()
+    dayMerge.rename(columns = {"CO2_Kg_Per_Hour_Projected": "CO2_Kg_Per_Day_Projected"}, inplace = True)
+
+    # Plotting Day-Based Bar Chart
+    dayBar.add_trace(go.Bar(x=dayMerge["Date"], y=dayMerge["CO2_Kg_Per_Day_Projected"], marker_color = colors[contactor],  name = f"Contactor Type: {contactor}"))
+
+
+    # Building Month based Production Summary Table for 8 DAC
+    monthSummary = weatherData.groupby("Month").agg({"CO2_Kg_Per_Month_Projected": ["mean", "min", "max"]})
+    monthSummary.columns = ["Mean Production CO2", "Min Production CO2", "Max Production CO2"]
+
+    # Formatting Month Based Summary Table
+    monthSummary = monthSummary.dropna().reset_index()
+    monthSummary["Mean Production CO2"] = monthSummary["Mean Production CO2"].astype(int)
+    monthSummary["Max Production CO2"] = monthSummary["Max Production CO2"].astype(int)
+    monthSummary["Min Production CO2"] = monthSummary["Min Production CO2"].astype(int)
+    monthSummary["Month"] = monthSummary["Month"].astype(str).map(monthNumToName)
+
+    # Plotting Month Based Bar Chart
+    monthMerge = weatherData.groupby("Month_Year").agg({"CO2_Kg_Per_Month_Projected" : "mean"}).reset_index()
+
+    # Dividing by 1000 to switch value to metric tons
+    monthBar.add_trace(go.Bar(x=monthMerge["Month_Year"], y=monthMerge["CO2_Kg_Per_Month_Projected"] / 1000, marker_color = colors[contactor],  name = f"Contactor Type: {contactor}"))
+
+
+  mainPlot.update_layout(xaxis_title = "Date", yaxis_title = "CO2 Production Volume (kg/hr)")
+  
+  st.plotly_chart(mainPlot)
+  mainPlot.show()
+
+  #newFig.update_layout(xaxis_title = "Date", yaxis_title = "CO2 Production Volume (kg/hr)",  legend = dict(groupclick = "toggleitem"))
+  #newFig.show()
+
+  dayBar.update_layout(xaxis_title = "Date", yaxis_title = "CO2 Production Volume (kg)", barmode = "group",   bargap = .2, legend = dict(groupclick = "toggleitem"))
+  st.plotly_chart(dayBar) 
+
+  #pivotScatter.update_layout(xaxis_title = "RH Regime", yaxis_title = "Production Volume (kg/hr)")
+  #pivotScatter.show()
+  
+  st.plotly_chart(monthBar)
+  monthBar.update_layout(xaxis_title = "Month", yaxis_title = "CO2 Production Volume (Tons)")
+
+  #return fig
+
+# Call to Function
+#rhPath = input("Enter RH and Temperature File (.csv or .xlsx)")
+perfEstFuncPolynom(df1, df2)
