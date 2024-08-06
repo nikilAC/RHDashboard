@@ -39,25 +39,6 @@ df1, df2 = get_drive_data()
 
 
 
-def getFilePydrive(file_name):
-  folder_id = '1XdHmj5RqecLzyxtFmWSXVm3Z7l-P905t'
-  query = f"'{folder_id}' in parents and title = '{file_name}' and trashed = false"
-  file_list = drive.ListFile({'q': query, 'supportsAllDrives': True,
-        'includeItemsFromAllDrives': True}).GetList()
-  if not file_list:
-    print(f'File "{file_name}" not found.')
-  else:
-    # Take the first matching file
-    file = file_list[0]
-
-    # Saves file locally
-    file.GetContentFile(f'{file_name}')
-
-  if '.csv' in file_name:
-     return pd.read_csv(file_name)
-  else:
-     return pd.read_excel(file_name)
-
 #sn1_data = getFilePydrive(file_name)
 
 # RH Data Estimation Script
