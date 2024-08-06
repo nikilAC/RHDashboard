@@ -16,25 +16,38 @@ from IPython.display import display
 import boto3
 
 
-google_auth_secrets = st.secrets["AWSKeys"]
+# Confidential Keys for Accessing AWS Database
+amzSecrets = st.secrets["AWSKeys"]
 
 
 
-def get_drive_data():
+def get_drive_data(weatherDataFile):
     """Grab Data from AWS .
     """
 
-    s3_client = boto3.client('s3', aws_access_key_id = google_auth_secrets['aws_key_access'], aws_secret_access_key = google_auth_secrets['aws_secret'])
+    s3_client = boto3.client('s3', aws_access_key_id = amzSecrets['aws_key_access'], aws_secret_access_key = amzSecrets['aws_secret'])
 
     # Get Representative SN1 Data from AWS
-    representativeData = s3_client.get_object(Bucket = 'rhbucketthing', Key = 'SN1_Representative_Data.csv')
-    # Weather Data to base Estimations on
-    tokyoGasData = s3_client.get_object(Bucket = 'rhbucketthing', Key = 'ATT-02_Meteorological_Data-Yokohama_2014-2024.xlsx')
-  
-    # Change format of object such that it outputs as Df (Csv needs decoding to get the correct result)
-    return pd.read_csv(io.StringIO(representativeData['Body'].read().decode('utf-8'))), pd.read_excel(io.BytesIO(tokyoGasData['Body'].read()))
 
-df1, df2 = get_drive_data()
+    representativeData = s3_client.get_object(Bucket = amzSecrets["weatherdatabucket"], Key = 'SN1_Representative_Data.csv')
+
+    # Save representative data to df
+
+    rep_df = pd.read_csv(io.StringIO(representativeData['Body'].read().decode('utf-8')))
+
+    # Weather Data to base Estimations
+
+    
+    weatherData = s3_client.get_object(Bucket =  amzSecrets["weatherdatabucket"], Key = weatherDataFile)
+
+    # Condition so code works with both csv and excel files
+    if '.xlsx' in weatherDataFile:
+      weather_df = pd.read_excel(io.BytesIO(weatherData['Body'].read()))
+    else:
+      weather_df = pd.read_csv(io.StringIO(weatherData['Body'].read().decode('utf-8')))
+
+    # Change format of object such that it outputs as Df (Csv needs decoding to get the correct result)
+    return rep_df, weather_df
 
 
 
@@ -43,9 +56,9 @@ df1, df2 = get_drive_data()
 
 # RH Data Estimation Script
 
-def perfEstFuncPolynom(df, weatherData, scale=1):
+def perfEstFuncPolynom(weatherDataFile, scale=1):
   #Dictionaries
-
+  df, weatherData = get_drive_data(weatherDataFile)
   # For converting hourly estimates -> Monthly Estimates
   hours_in_month = {
     "01": 31 * 24,
@@ -221,5 +234,9 @@ def perfEstFuncPolynom(df, weatherData, scale=1):
   #return fig
 
 # Call to Function
-#rhPath = input("Enter RH and Temperature File (.csv or .xlsx)")
-perfEstFuncPolynom(df1, df2)
+rhPath  = st.text_input("Enter RH and Temperature File (.csv or .xlsx)")
+
+
+# DOING IT WITHOUT STREAMLIT rhPath = input("Enter RH and Temperature File (.csv or .xlsx)")
+
+perfEstFuncPolynom(rhPath)
