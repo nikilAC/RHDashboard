@@ -8,7 +8,7 @@ import numpy as np
 from collections.abc import Mapping
 import io
 import json
-
+import time
 from apiclient import discovery
 from httplib2 import Http
 
@@ -19,17 +19,26 @@ import boto3
 # Confidential Keys for Accessing AWS Database
 amzSecrets = st.secrets["AWSKeys"]
 
+# s3 connection to call functions on AWS Stuff
+s3_client = boto3.client('s3', aws_access_key_id = amzSecrets['aws_key_access'], aws_secret_access_key = amzSecrets['aws_secret'])
+def get_bucket_list(bucketKey):
+  s3 = boto3.resource('s3', aws_access_key_id = amzSecrets['aws_key_access'], aws_secret_access_key = amzSecrets['aws_secret'])
+  my_bucket = s3.Bucket(amzSecrets[bucketKey])
+  bucketnames = np.array([])
+  # List out objects in s3 bucket
+  for obj in my_bucket.objects.all():
+    bucketnames = np.append(bucketnames, obj.key)
+
+  return bucketnames
 
 
 def get_drive_data(weatherDataFile):
     """Grab Data from AWS .
     """
 
-    s3_client = boto3.client('s3', aws_access_key_id = amzSecrets['aws_key_access'], aws_secret_access_key = amzSecrets['aws_secret'])
-
     # Get Representative SN1 Data from AWS
 
-    representativeData = s3_client.get_object(Bucket = amzSecrets["weatherdatabucket"], Key = 'SN1_Representative_Data.csv')
+    representativeData = s3_client.get_object(Bucket = amzSecrets["representativedatabucket"], Key = 'SN1_Representative_Data.csv')
 
     # Save representative data to df
 
@@ -57,7 +66,7 @@ def get_drive_data(weatherDataFile):
 # RH Data Estimation Script
 
 def perfEstFuncPolynom(weatherDataFile, scale=1):
-  #Dictionaries
+  #Dictionaries    
   df, weatherData = get_drive_data(weatherDataFile)
   # For converting hourly estimates -> Monthly Estimates
   hours_in_month = {
@@ -217,7 +226,6 @@ def perfEstFuncPolynom(weatherDataFile, scale=1):
   mainPlot.update_layout(xaxis_title = "Date", yaxis_title = "CO2 Production Volume (kg/hr)")
   
   st.plotly_chart(mainPlot)
-  mainPlot.show()
 
   #newFig.update_layout(xaxis_title = "Date", yaxis_title = "CO2 Production Volume (kg/hr)",  legend = dict(groupclick = "toggleitem"))
   #newFig.show()
@@ -233,10 +241,11 @@ def perfEstFuncPolynom(weatherDataFile, scale=1):
 
   #return fig
 
-# Call to Function
-rhPath  = st.text_input("Enter RH and Temperature File (.csv or .xlsx)")
+# Code to get list of rhPaths'
 
-
+rhPath = st.selectbox("Choose Weather File", get_bucket_list("weatherdatabucket"))
+st.write("You chose:", rhPath)
 # DOING IT WITHOUT STREAMLIT rhPath = input("Enter RH and Temperature File (.csv or .xlsx)")
-
-perfEstFuncPolynom(rhPath)
+with st.spinner('Calculating...'):
+  time.sleep(5)
+  perfEstFuncPolynom(rhPath)
