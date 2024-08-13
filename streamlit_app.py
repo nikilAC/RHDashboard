@@ -16,6 +16,9 @@ from IPython.display import display
 import boto3
 
 
+# Make page wide layout 
+st. set_page_config(layout="wide")
+
 # Confidential Keys for Accessing AWS Database
 amzSecrets = st.secrets["AWSKeys"]
 
@@ -223,9 +226,11 @@ def perfEstFuncPolynom(weatherDataFile, scale=1):
     monthBar.add_trace(go.Bar(x=monthMerge["Month_Year"], y=monthMerge["CO2_Kg_Per_Month_Projected"] / 1000, marker_color = colors[contactor],  name = f"Contactor Type: {contactor}"))
 
 
-  mainPlot.update_layout(xaxis_title = "Date", yaxis_title = "CO2 Production Volume (kg/hr)")
-  
-  st.plotly_chart(mainPlot)
+  mainPlot.update_layout(xaxis_title = "Date", yaxis_title = "CO2 Production Volume (kg/hr)", width=7000, height = 600)
+
+
+
+  st.plotly_chart(mainPlot, use_container_width = True)
 
   #newFig.update_layout(xaxis_title = "Date", yaxis_title = "CO2 Production Volume (kg/hr)",  legend = dict(groupclick = "toggleitem"))
   #newFig.show()
@@ -243,7 +248,7 @@ def perfEstFuncPolynom(weatherDataFile, scale=1):
 
 # Code to get list of rhPaths'
 
-rhPath = st.selectbox("Choose Weather File", get_bucket_list("weatherdatabucket"))
+rhPath = st.sidebar.selectbox("Choose Weather File", get_bucket_list("weatherdatabucket"), placeholder = "Select a Dataset")
 st.write("You chose:", rhPath)
 # DOING IT WITHOUT STREAMLIT rhPath = input("Enter RH and Temperature File (.csv or .xlsx)")
 with st.spinner('Calculating...'):
