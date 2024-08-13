@@ -248,7 +248,7 @@ def perfEstFuncPolynom(weatherDataFile, scale=1):
 
 # Code to get list of rhPaths'
 
-rhPath = st.sidebar.selectbox("Choose Weather File", get_bucket_list("weatherdatabucket"), index = None)
+rhPath = st.sidebar.selectbox("Choose Weather File", get_bucket_list("weatherdatabucket"), index = None,placeholder = "Select a Dataset")
 st.write("You chose:", rhPath)
 # DOING IT WITHOUT STREAMLIT rhPath = input("Enter RH and Temperature File (.csv or .xlsx)")
 with st.spinner('Calculating...'):
