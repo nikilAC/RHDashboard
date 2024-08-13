@@ -236,12 +236,12 @@ def perfEstFuncPolynom(weatherDataFile, scale=1):
   #newFig.show()
 
   dayBar.update_layout(xaxis_title = "Date", yaxis_title = "CO2 Production Volume (kg)", barmode = "group",   bargap = .2, legend = dict(groupclick = "toggleitem"))
-  st.plotly_chart(dayBar) 
+  st.plotly_chart(dayBar, use_container_width = True) 
 
   #pivotScatter.update_layout(xaxis_title = "RH Regime", yaxis_title = "Production Volume (kg/hr)")
   #pivotScatter.show()
   
-  st.plotly_chart(monthBar)
+  st.plotly_chart(monthBar, use_container_width = True)
   monthBar.update_layout(xaxis_title = "Month", yaxis_title = "CO2 Production Volume (Tons)")
 
   #return fig
